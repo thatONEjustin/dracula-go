@@ -18,9 +18,13 @@ type model struct {
 	result    string
 	textInput textinput.Model
 	err       error
+	palette   string
+	shade     string
 }
 
-var dracula_colors = map[string]map[string]string{
+type DraculaColors = map[string]map[string]string
+
+var dracula_colors = DraculaColors{
 	"darker": {
 		"50":      "#cdd0e4",
 		"100":     "#b5bad6",
@@ -326,19 +330,29 @@ func (m model) Init() tea.Cmd {
 	return textinput.Blink
 }
 
-func process_strig(input string) string {
-	if strings.Contains(input, ",") == true {
-		split := strings.Split(input, ",")
+func process_result(input string) string {
+	split := strings.Split(input, ",")
 
-		palette := strings.Trim(split[0], " ")
-		shade := strings.Trim(split[1], " ")
+	var palette, shade, result string = "", "", ""
 
-		return string(dracula_colors[palette][shade])
+	if len(split) > 1 {
+		palette = strings.Trim(split[0], " ")
+		shade = strings.Trim(split[1], " ")
+	} else {
+		palette = strings.Trim(input, " ")
 	}
 
-	palette := fmt.Sprintf("%v", dracula_colors[input])
+	if dracula_colors[palette] == nil {
+		return "error"
+	}
 
-	return palette
+	if shade != "" {
+		result = string(dracula_colors[palette][shade])
+	} else {
+		result = fmt.Sprintf("%v", dracula_colors[strings.Trim(input, " ")])
+	}
+
+	return result
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -348,7 +362,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyEnter:
-			m.result = process_strig(m.textInput.Value())
+			m.result = process_result(m.textInput.Value())
 			return m, tea.Quit
 		case tea.KeyCtrlC, tea.KeyEsc:
 			return m, tea.Quit
@@ -383,7 +397,6 @@ func main() {
 
 	// Assert the final tea.Model to our local model and print the choice.
 	if m, ok := m.(model); ok && m.result != "" {
-		// fmt.Printf("\n---\nYou chose %s!\n", m.choice)
 		fmt.Println(m.result)
 	}
 }
