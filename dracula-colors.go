@@ -1,12 +1,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
-	"os"
-	"strings"
-
 	textinput "github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"os"
+	"strings"
 )
 
 // These imports will be used later on the tutorial. If you save the file
@@ -23,6 +24,8 @@ type model struct {
 }
 
 type DraculaColors = map[string]map[string]string
+
+type errorMsg error
 
 var dracula_colors = DraculaColors{
 	"darker": {
@@ -330,10 +333,11 @@ func (m model) Init() tea.Cmd {
 	return textinput.Blink
 }
 
-func process_result(input string) string {
+func process_input(input string) (any, errorMsg) {
 	split := strings.Split(input, ",")
 
-	var palette, shade, result string = "", "", ""
+	var palette, shade string
+	var result any
 
 	if len(split) > 1 {
 		palette = strings.Trim(split[0], " ")
@@ -343,16 +347,17 @@ func process_result(input string) string {
 	}
 
 	if dracula_colors[palette] == nil {
-		return "error"
+		return "", errors.New("color doesnt exist")
 	}
 
 	if shade != "" {
 		result = string(dracula_colors[palette][shade])
 	} else {
-		result = fmt.Sprintf("%v", dracula_colors[strings.Trim(input, " ")])
+		// result = fmt.Sprintf("%v", dracula_colors[strings.Trim(input, " ")])
+		result = dracula_colors[palette]
 	}
 
-	return result
+	return result, nil
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -362,16 +367,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyEnter:
-			m.result = process_result(m.textInput.Value())
-			return m, tea.Quit
+			result, error := process_input(m.textInput.Value())
+			if error != nil {
+				m.err = error
+				return m, tea.Quit
+			}
+
+			switch result := result.(type) {
+			case map[string]string:
+				var background string = result["DEFAULT"]
+				var style = lipgloss.NewStyle().
+					Bold(true).
+					Foreground(lipgloss.Color("#FAFAFA")).
+					Background(lipgloss.Color(background)).
+					Width(22)
+				m.result = fmt.Sprintf(
+					style.Render("---\nmap:\n%s\n---"),
+					result,
+				)
+
+			case string:
+				m.result = fmt.Sprintf("%s", result)
+			}
+
 		case tea.KeyCtrlC, tea.KeyEsc:
 			return m, tea.Quit
 		}
 
 	// We handle errors just like any other message
-	case error:
+	case errorMsg:
 		m.err = msg
-		return m, nil
+		return m, tea.Quit
 	}
 
 	m.textInput, cmd = m.textInput.Update(msg)
@@ -379,11 +405,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	return fmt.Sprintf(
+	var prompt string = fmt.Sprintf(
 		"Tell me what dracula color you need:\n\n%s\n\n%s",
 		m.textInput.View(),
 		"(esc to quit)",
 	) + "\n"
+
+	if m.result != "" {
+		prompt += fmt.Sprintf(
+			"---\n%s\n---",
+			m.result,
+		)
+	}
+
+	return prompt
 }
 
 func main() {
@@ -397,6 +432,6 @@ func main() {
 
 	// Assert the final tea.Model to our local model and print the choice.
 	if m, ok := m.(model); ok && m.result != "" {
-		fmt.Println(m.result)
+		// fmt.Println(m.result)
 	}
 }
