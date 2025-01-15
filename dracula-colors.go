@@ -6,6 +6,7 @@ import (
 	textinput "github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 	"os"
 	"strings"
 )
@@ -368,27 +369,70 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.Type {
 		case tea.KeyEnter:
 			result, error := process_input(m.textInput.Value())
+
 			if error != nil {
 				m.err = error
 				return m, tea.Quit
 			}
 
+			/*
+			   t := table.New().
+			       Border(lipgloss.NormalBorder()).
+			       BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("99"))).
+			       StyleFunc(func(row, col int) lipgloss.Style {
+			           switch {
+			           case row == 0:
+			               return HeaderStyle
+			           case row%2 == 0:
+			               return EvenRowStyle
+			           default:
+			               return OddRowStyle
+			           }
+			       }).
+			       Headers("WEIGHT", "VALUE").
+			       Rows(rows...)
+			*/
+
+			// t := table.New().
+			// const header_style = ;
+			// const row_style;
+
+			var background string
+
 			switch result := result.(type) {
 			case map[string]string:
-				var background string = result["DEFAULT"]
-				var style = lipgloss.NewStyle().
-					Bold(true).
-					Foreground(lipgloss.Color("#FAFAFA")).
-					Background(lipgloss.Color(background)).
-					Width(22)
-				m.result = fmt.Sprintf(
-					style.Render("---\nmap:\n%s\n---"),
-					result,
-				)
-
+				background = result["DEFAULT"]
 			case string:
-				m.result = fmt.Sprintf("%s", result)
+				background = result
 			}
+
+			/*
+			 TODO: add tables and styles
+			   var header_style = lipgloss.NewStyle().
+			       Bold(true).
+			       Foreground(lipgloss.Color("#FAFAFA")).
+			       Background(lipgloss.Color(background)).
+			       PaddingTop(4).
+			       PaddingLeft(4)
+
+			   m.result = fmt.Sprintf(
+			       style.Render("---\nmap:\n%s\n---"),
+			       result,
+			   )
+			*/
+
+			var style = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#FAFAFA")).
+				Background(lipgloss.Color(background)).
+				PaddingTop(4).
+				PaddingLeft(4).
+				Width(22)
+
+			m.result = fmt.Sprintf(
+				style.Render("---\nmap:\n%s\n---"),
+				result,
+			)
 
 		case tea.KeyCtrlC, tea.KeyEsc:
 			return m, tea.Quit
