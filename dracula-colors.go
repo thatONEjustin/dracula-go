@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -16,15 +17,25 @@ import (
 // You may also need to run `go mod tidy` to download bubbletea and its
 // dependencies.
 
-type model struct {
-	result    string
-	textInput textinput.Model
-	err       error
-	palette   string
-	shade     string
+type DraculaColors = map[string]DraculaPalette
+type DraculaPalette = map[string]DraculaColor
+type DraculaColor = string
+
+type ColorResult struct {
+	palette string
+	shade   string
+	color   DraculaPalette
 }
 
-type DraculaColors = map[string]map[string]string
+type model struct {
+	textInput textinput.Model
+	err       error
+	result    DraculaPalette
+	palette   string
+	shade     string
+	rows      [][]string
+	color     string
+}
 
 type errorMsg error
 
@@ -327,6 +338,7 @@ func initialModel() model {
 	return model{
 		textInput: ti,
 		err:       nil,
+		result:    nil,
 	}
 }
 
@@ -334,31 +346,57 @@ func (m model) Init() tea.Cmd {
 	return textinput.Blink
 }
 
-func process_input(input string) (any, errorMsg) {
-	split := strings.Split(input, ",")
-
+func process_input(user_input string) (string, string, errorMsg) {
+	split := strings.Split(user_input, ",")
 	var palette, shade string
-	var result any
 
 	if len(split) > 1 {
 		palette = strings.Trim(split[0], " ")
 		shade = strings.Trim(split[1], " ")
 	} else {
-		palette = strings.Trim(input, " ")
+		palette = strings.Trim(user_input, " ")
+		shade = ""
 	}
 
-	if dracula_colors[palette] == nil {
-		return "", errors.New("color doesnt exist")
+	_, palette_exists := dracula_colors[palette]
+
+	if palette_exists == false {
+		error := errors.New("palette doesnt exist")
+		return "", "", error
 	}
 
 	if shade != "" {
-		result = string(dracula_colors[palette][shade])
-	} else {
-		// result = fmt.Sprintf("%v", dracula_colors[strings.Trim(input, " ")])
-		result = dracula_colors[palette]
+		_, shade_exists := dracula_colors[palette][shade]
+
+		if shade_exists == false {
+			error := errors.New("shade doesnt exist")
+			return "", "", error
+		}
 	}
 
-	return result, nil
+	return palette, shade, nil
+}
+
+func generate_rows(user_result DraculaPalette) [][]string {
+
+	keys := make([]string, 0, len(user_result))
+
+	for k := range user_result {
+		keys = append(keys, k)
+	}
+
+	sort.Sort(sort.StringSlice(keys))
+
+	var colors [][]string
+
+	// colors = append(colors, []string{"WEIGHT", "VALUE"})
+
+	for _, value := range keys {
+		var row = []string{"", value, user_result[value]}
+		colors = append(colors, row)
+	}
+
+	return colors
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -368,71 +406,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyEnter:
-			result, error := process_input(m.textInput.Value())
+			palette, shade, error := process_input(m.textInput.Value())
 
 			if error != nil {
 				m.err = error
-				return m, tea.Quit
+				m.result = nil
+				// return m, tea.Quit
+				return m, nil
 			}
 
-			/*
-			   t := table.New().
-			       Border(lipgloss.NormalBorder()).
-			       BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("99"))).
-			       StyleFunc(func(row, col int) lipgloss.Style {
-			           switch {
-			           case row == 0:
-			               return HeaderStyle
-			           case row%2 == 0:
-			               return EvenRowStyle
-			           default:
-			               return OddRowStyle
-			           }
-			       }).
-			       Headers("WEIGHT", "VALUE").
-			       Rows(rows...)
-			*/
+			m.palette = palette
+			m.shade = shade
 
-			// t := table.New().
-			// const header_style = ;
-			// const row_style;
-
-			var background string
-
-			switch result := result.(type) {
-			case map[string]string:
-				background = result["DEFAULT"]
-			case string:
-				background = result
+			if m.shade != "" {
+				var custom_palette = make(DraculaPalette)
+				custom_palette[shade] = dracula_colors[m.palette][m.shade]
+				m.result = custom_palette
+				m.rows = generate_rows(custom_palette)
+			} else {
+				m.result = dracula_colors[palette]
+				m.rows = generate_rows(dracula_colors[palette])
 			}
 
-			/*
-			 TODO: add tables and styles
-			   var header_style = lipgloss.NewStyle().
-			       Bold(true).
-			       Foreground(lipgloss.Color("#FAFAFA")).
-			       Background(lipgloss.Color(background)).
-			       PaddingTop(4).
-			       PaddingLeft(4)
-
-			   m.result = fmt.Sprintf(
-			       style.Render("---\nmap:\n%s\n---"),
-			       result,
-			   )
-			*/
-
-			var style = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(lipgloss.Color("#FAFAFA")).
-				Background(lipgloss.Color(background)).
-				PaddingTop(4).
-				PaddingLeft(4).
-				Width(22)
-
-			m.result = fmt.Sprintf(
-				style.Render("---\nmap:\n%s\n---"),
-				result,
-			)
+			m.color = m.result["DEFAULT"]
 
 		case tea.KeyCtrlC, tea.KeyEsc:
 			return m, tea.Quit
@@ -449,33 +445,141 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	var prompt string = fmt.Sprintf(
-		"Tell me what dracula color you need:\n\n%s\n\n%s",
-		m.textInput.View(),
-		"(esc to quit)",
-	) + "\n"
-
-	if m.result != "" {
-		prompt += fmt.Sprintf(
-			"---\n%s\n---",
-			m.result,
-		)
+	var ui string
+	if m.err != nil {
+		return fmt.Sprintf(
+			"---\n%s\n%s\n---",
+			m.err,
+			"(esc to quit)",
+		) + "\n"
+	} else {
+		ui = fmt.Sprintf(
+			"Tell me what dracula color you need:\n\n%s\n\n%s",
+			m.textInput.View(),
+			"(esc to quit)",
+		) + "\n"
 	}
 
-	return prompt
+	/*
+	   t := table.New().
+	       Border(lipgloss.NormalBorder()).
+	       BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("99"))).
+	       StyleFunc(func(row, col int) lipgloss.Style {
+	           switch {
+	           case row == 0:
+	               return HeaderStyle
+	           case row%2 == 0:
+	               return EvenRowStyle
+	           default:
+	               return OddRowStyle
+	           }
+	       }).
+	       Headers("WEIGHT", "VALUE").
+	       Rows(rows...)
+	*/
+
+	/*
+	 TODO: add tables and styles
+	   var header_style = lipgloss.NewStyle().
+	       Bold(true).
+	       Foreground(lipgloss.Color("#FAFAFA")).
+	       Background(lipgloss.Color(background)).
+	       PaddingTop(4).
+	       PaddingLeft(4)
+
+	   m.result = fmt.Sprintf(
+	       style.Render("---\nmap:\n%s\n---"),
+	       result,
+	   )
+	*/
+
+	/*
+		var style = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#FAFAFA")).
+			Background(lipgloss.Color(background)).
+			PaddingTop(4).
+			PaddingLeft(4).
+			Width(22)
+	*/
+
+	if m.result != nil {
+		var header_style = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(lipgloss.Color("#FAFAFA")).
+			Background(lipgloss.Color(m.color))
+
+		var odd_row_style = lipgloss.NewStyle().
+			Bold(false).
+			Foreground(lipgloss.Color("#FAFAFA")).
+			Background(lipgloss.Color(dracula_colors["darker"]["DEFAULT"]))
+
+		var even_row_style = lipgloss.NewStyle().
+			Bold(false).
+			Foreground(lipgloss.Color("#FAFAFA")).
+			Background(lipgloss.Color(dracula_colors["darker"]["700"]))
+
+		// table_styles.Header = table_styles.Header.
+		// 	Bold(true).
+		// 	Foreground(lipgloss.Color("#FAFAFA")).
+		// 	Background(lipgloss.Color(m.color))
+
+		t := table.New().
+			Border(lipgloss.NormalBorder()).
+			BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(m.color))).
+			Headers(m.palette, "weight", "value").
+			Rows(m.rows...).
+			StyleFunc(func(row, col int) lipgloss.Style {
+				switch {
+				case row%2 == 1:
+					return odd_row_style
+				case row%2 == 0:
+					return even_row_style
+				default:
+					return header_style
+				}
+			})
+
+		ui += fmt.Sprintf(
+			"\n%s\n",
+			t,
+		)
+
+		// if m.test_result != nil {
+		//
+		// 	ui += fmt.Sprintf(
+		// 		"---\n%s\n---",
+		// 		m.test_result,
+		// 	)
+		//
+		// }
+	}
+
+	// if m.result.(type) != DraculaPalette {
+	// 	ui += fmt.Sprintf(
+	// 		"---\n%s\n---",
+	// 		m.result,
+	// 	)
+	// }
+	// switch result_type := m.result.(type) {
+	// case DraculaPalette:
+	// 	ui += fmt.Sprintf(
+	// 		"---\n%s\n---",
+	// 		m.result,
+	// 	)
+	// case nil:
+	// 	ui = fmt.Sprintf("---\n\nnil, result_type:%s\n\n---", result_type)
+	// }
+
+	return ui
 }
 
 func main() {
 	p := tea.NewProgram(initialModel())
-	m, err := p.Run()
+	_, err := p.Run()
 
 	if err != nil {
 		fmt.Printf("Alas, there's been an error: %v", err)
 		os.Exit(1)
-	}
-
-	// Assert the final tea.Model to our local model and print the choice.
-	if m, ok := m.(model); ok && m.result != "" {
-		// fmt.Println(m.result)
 	}
 }
