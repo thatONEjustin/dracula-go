@@ -328,6 +328,22 @@ func (m model) Init() tea.Cmd {
 	return nil
 }
 
+func get_color(palette, shade string) (DraculaColor, error) {
+	if colors, ok := dracula_colors[palette][shade]; ok {
+		return colors, nil
+	}
+
+	return "", errors.New("shade doesnt exist")
+}
+
+func get_palette(palette string) (DraculaPalette, error) {
+	if palette, ok := dracula_colors[palette]; ok {
+		return palette, nil
+	}
+
+	return nil, errors.New("palette doesnt exist")
+}
+
 func process_input(user_input string) (string, string, errorMsg) {
 	split := strings.Split(user_input, ",")
 	var palette, shade string
@@ -340,20 +356,12 @@ func process_input(user_input string) (string, string, errorMsg) {
 		shade = ""
 	}
 
-	_, palette_exists := dracula_colors[palette]
-
-	if palette_exists == false {
-		error := errors.New("palette doesnt exist")
+	if _, error := get_palette(palette); error != nil {
 		return "", "", error
 	}
 
-	if shade != "" {
-		_, shade_exists := dracula_colors[palette][shade]
-
-		if shade_exists == false {
-			error := errors.New("shade doesnt exist")
-			return "", "", error
-		}
+	if _, shade_error := get_color(palette, shade); shade_error != nil && shade != "" {
+		return "", "", shade_error
 	}
 
 	return palette, shade, nil
