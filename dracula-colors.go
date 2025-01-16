@@ -416,6 +416,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.palette = palette
 			m.shade = shade
+			m.err = nil
 
 		case tea.KeyCtrlC, tea.KeyEsc:
 			return m, tea.Quit
@@ -432,22 +433,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	var ui string = ""
+
+	ui += fmt.Sprintf(
+		"Tell me what dracula color you need:\n\n%s\n\n%s",
+		m.textInput.View(),
+		"(esc to quit)",
+	) + "\n"
+
 	if m.err != nil {
-		return fmt.Sprintf(
-			"---\n%s\n%s\n---",
-			m.err,
-			"(esc to quit)",
-		) + "\n"
-	} else {
 		ui += fmt.Sprintf(
-			"Tell me what dracula color you need:\n\n%s\n\n%s",
-			m.textInput.View(),
-			"(esc to quit)",
+			"---\n%s\n---",
+			m.err,
 		) + "\n"
 	}
 
 	if m.result != nil {
-
 		var text_color string
 
 		switch m.palette {
