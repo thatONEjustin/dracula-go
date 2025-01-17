@@ -19,7 +19,7 @@ type model struct {
 	err       error
 	palette   string
 	shade     string
-	rows      [][]string
+	rows      LipglossTableRows
 	color     string
 	result    DraculaPalette
 }
@@ -29,6 +29,8 @@ type errorMsg error
 type DraculaColors = map[string]DraculaPalette
 type DraculaPalette = map[string]DraculaColor
 type DraculaColor = string
+
+type LipglossTableRows = [][]string
 
 const padding_x int = 1
 const padding_y int = 0
@@ -328,7 +330,7 @@ func (m model) Init() tea.Cmd {
 	return nil
 }
 
-func get_color(palette, shade string) (DraculaColor, error) {
+func get_color(palette, shade string) (DraculaColor, errorMsg) {
 	if colors, ok := dracula_colors[palette][shade]; ok {
 		return colors, nil
 	}
@@ -336,7 +338,7 @@ func get_color(palette, shade string) (DraculaColor, error) {
 	return "", errors.New("shade doesnt exist")
 }
 
-func get_palette(palette string) (DraculaPalette, error) {
+func get_palette(palette string) (DraculaPalette, errorMsg) {
 	if palette, ok := dracula_colors[palette]; ok {
 		return palette, nil
 	}
@@ -367,7 +369,7 @@ func process_input(user_input string) (string, string, errorMsg) {
 	return palette, shade, nil
 }
 
-func generate_rows(user_result DraculaPalette) [][]string {
+func generate_rows(user_result DraculaPalette) LipglossTableRows {
 	keys := make([]string, 0, len(user_result))
 
 	for k := range user_result {
@@ -376,7 +378,7 @@ func generate_rows(user_result DraculaPalette) [][]string {
 
 	sort.Sort(sort.StringSlice(keys))
 
-	var colors [][]string
+	var colors LipglossTableRows
 
 	for _, value := range keys {
 		var row = []string{"color", value, user_result[value]}
@@ -403,14 +405,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if shade != "" {
 				var tmp_palette = make(DraculaPalette)
-				tmp_palette[shade] = dracula_colors[palette][shade]
+				tmp_palette[shade], _ = get_color(palette, shade)
+
 				m.result = tmp_palette
-				m.color = dracula_colors[palette][shade]
+				m.color = tmp_palette[shade]
 				m.rows = generate_rows(tmp_palette)
 
 			} else {
-				m.result = dracula_colors[palette]
-				m.color = dracula_colors[palette]["DEFAULT"]
+				m.result, _ = get_palette(palette)
+				m.color, _ = get_color(palette, "DEFAULT")
 				m.rows = generate_rows(dracula_colors[palette])
 			}
 
@@ -422,7 +425,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
-	case error:
+	case errorMsg:
 		m.err = msg
 		return m, tea.Quit
 	}
